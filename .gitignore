@@ -1,0 +1,6 @@
+binaries/*
+*.env
+*.pyc
+kubeconfig
+pods/*
+certs/*

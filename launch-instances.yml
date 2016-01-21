@@ -1,0 +1,81 @@
+---
+# Author: Naveen Joy
+# Launch instances in OpenStack Cloud using a simple cloud profile
+# Add the node names and their metadata to the nodes list 
+# The node metadata defines their roles
+# Command: ansible-playbook -i hosts launch-instances.yml
+
+- hosts: 
+    - localhost
+  vars_files:
+    - settings.yaml
+  tasks:
+
+    - name: launch openstack instances
+      os_server: 
+        state: present
+        auth:
+          auth_url: "{{ os_cloud_profile.os_auth_url }}"
+          username: "{{ os_cloud_profile.os_username }}"
+          password: "{{ os_cloud_profile.os_password }}"
+          project_name: "{{ os_cloud_profile.os_tenant_name }}"
+        name: "{{ item.name }}"
+        region_name: "{{ os_cloud_profile.os_region }}"
+        availability_zone: "{{ os_cloud_profile.os_availability_zone }}"
+        image: "{{ os_cloud_profile.os_image_name }}"
+        key_name: "{{ os_cloud_profile.os_key_name }}"
+        flavor: "{{ os_cloud_profile.os_flavor_name }}"
+        floating_ip_pools: "{{ os_cloud_profile.os_floatingip_pools }}"
+        nics: [ { net-name: "{{ os_cloud_profile.os_network_name }}" } ]
+        security_groups: "{{ os_cloud_profile.os_security_groups }}"
+        meta: "{{ item.meta }}"
+      with_items:
+        - "{{ nodes }}"
+      when: create_nodes
+      tags:
+        - instances
+
+
+- hosts: 
+    - computenodes
+  vars:
+    iptablesupdateIN: false
+    iptablesupdateOUT: false
+  vars_files:
+    - settings.yaml
+  become_user: root
+  become: yes
+  tasks:
+    - name: iptables hack to permit pod traffic blocked by neutron
+      shell: iptables -S FORWARD | egrep '^-A' | head -2
+      register: iptablesrules
+      tags:
+        - iptables
+
+    - name: Check if iptables inbound rule needs update
+      set_fact:
+          iptablesupdateIN: true
+      when: "'kubernetes_node_pod_cidr_in' not in iptablesrules.stdout"
+      tags:
+        - iptables
+
+    - name: Check if iptables outbound rule needs update
+      set_fact:
+          iptablesupdateOUT: true
+      when: "'kubernetes_node_pod_cidr_out' not in iptablesrules.stdout"
+      tags:
+        - iptables
+
+    - name: Allow inbound traffic to node POD CIDR range
+      command: /sbin/iptables -I FORWARD 1 -p all -s 0.0.0.0/0 -d {{ node_pod_cidr_range }}
+                 -j ACCEPT -m comment --comment "kubernetes_node_pod_cidr_in"
+      when: iptablesupdateIN
+      tags:
+        - iptables
+
+    - name: Allow outbound traffic to node POD CIDR range
+      command: /sbin/iptables -I FORWARD 2 -p all -s {{ node_pod_cidr_range }} -d 0.0.0.0/0
+                 -j ACCEPT -m comment --comment "kubernetes_node_pod_cidr_out"
+      when: iptablesupdateOUT
+      tags:
+        - iptables

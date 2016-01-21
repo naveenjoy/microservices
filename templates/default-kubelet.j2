@@ -1,0 +1,15 @@
+#Version 1.1
+#Template file for /etc/default/kubelet file
+
+KUBELET_OPTS='
+--address=0.0.0.0
+{% for host in groups['kubernetes_master'] %}
+--api_servers=https://{{ hostvars[host]['ansible_cbr0']['ipv4']['address'] }}:{{ api_server_secure_port }}
+{% endfor %}
+--register-node=true 
+--config=/etc/kubernetes/manifests 
+--kubeconfig=/var/lib/kubelet/kubeconfig
+--host-network-sources=*
+--configure-cbr0=false
+'
+

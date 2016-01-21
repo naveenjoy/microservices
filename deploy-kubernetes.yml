@@ -1,0 +1,286 @@
+---
+#Author: Naveen Joy
+#Deploy Kubernetes Master and worker components
+#Run command: ansible-playbook -i scripts/inventory.py deploy-kubernetes.yml
+
+- hosts: 
+    - localhost
+  vars_files:
+    - settings.yaml
+  tasks:
+    - name: set base directory for ansible
+      set_fact: 
+        ansible_base_dir: "{{ ansible_env.PWD }}"
+      tags:
+        - kube
+        - docker
+
+    - name: set base directory for addons
+      set_fact:
+        ansible_cert_dir: "{{ ansible_base_dir }}/certs"
+        ansible_script_dir: "{{ ansible_base_dir }}/scripts"
+        ansible_binary_dir: "{{ ansible_base_dir }}/binaries"
+      tags:
+        - kube
+        - docker
+
+- hosts: 
+    - kubernetes_master
+    - kubernetes_worker
+  become_user: root
+  become: yes
+  vars_files: 
+    - settings.yaml
+  tasks:
+    - name: Download the kubelet binary
+      get_url: 
+        url: "{{ k8s_binary_location }}/v{{ k8s_version }}/bin/linux/amd64/kubelet"
+        dest: "/usr/bin/kubelet"
+        mode: 0511
+      environment:
+        HTTP_PROXY: "{{ http_proxy|default('') }}"
+        HTTPS_PROXY: "{{ https_proxy|default('') }}"
+      notify:
+        - restart kubelet
+      tags:
+        - kube
+
+    - name: Download the kube-proxy binary
+      get_url: 
+        url: "{{ k8s_binary_location }}/v{{ k8s_version }}/bin/linux/amd64/kube-proxy"
+        dest: "/usr/bin/kube-proxy"
+        mode: 0511
+      environment:
+        HTTP_PROXY: "{{ http_proxy|default('') }}"
+        HTTPS_PROXY: "{{ https_proxy|default('') }}"
+      notify:
+        - restart kube-proxy
+      tags:
+        - kube
+
+    - name: Ensure config directories are present
+      file: "path={{ item }} state=directory mode=0755 owner=root group=ubuntu"
+      with_items: "{{ config_dirs }}" 
+      tags:
+        - kube
+
+    - name: Ensure cert group is present
+      group: "name={{ cert_group }} state=present"
+      tags:
+        - kube
+        - docker
+
+    - name: Create certificates on all nodes to enable TLS for docker and kubernetes
+      script: ./scripts/make-ca-cert.sh '_use_openstack_external_ip_'
+      environment:
+        EXTRA_SANS: "IP:{{ ansible_default_ipv4.address }},IP:{{ ansible_cbr0.ipv4.address }}"
+        CERT_GROUP: "{{ cert_group }}"
+        CERT_DIR: "{{ k8s_certs_location }}"
+        HTTP_PROXY: "{{ http_proxy|default('') }}"
+        HTTPS_PROXY: "{{ https_proxy|default('') }}"
+        NO_PROXY: "{{ no_proxy|default('') }}"
+      args:
+        creates: server.cert
+      tags:
+        - kube
+      notify:
+        - restart kubelet
+        - restart kube-proxy
+        - restart docker
+
+    - name: Fetch remote CA and client Certificates for docker client authentication
+      fetch: "src={{ k8s_certs_location }}/{{ item }} dest={{ hostvars['localhost']['ansible_cert_dir'] }}/{{ ansible_hostname }}/ flat=yes"
+      with_items:
+        - "ca.pem" #CA Certificate
+        - "key.pem" #TLS Client key (Docker and Kube Clients)
+        - "cert.pem" #TLS Client cert
+      tags:
+        - docker
+        - kube
+
+    - name: Register base64 encoded Master CA Certificate
+      slurp: 
+        src: "{{ k8s_certs_location }}/ca.pem"
+      register: ca_certificate
+      when: "'kubernetes_master' in group_names"
+      tags:
+        - kube
+
+    - name: Register base64 encoded Master Client Certificate
+      slurp: 
+        src: "{{ k8s_certs_location }}/cert.pem"
+      register: client_certificate
+      when: "'kubernetes_master' in group_names"
+      tags:
+        - kube
+
+
+    - name: Register base64 encoded Master Client Key
+      slurp: 
+        src: "{{ k8s_certs_location }}/key.pem"
+      register: client_key
+      when: "'kubernetes_master' in group_names"
+      tags:
+        - kube
+
+    - name: Set the Certificate data and the master node IP Addr as facts
+      set_fact:
+        ca_certificate_data: "{{ ca_certificate.content }}"
+        client_certificate_data: "{{ client_certificate.content }}"
+        client_key_data: "{{ client_key.content }}"
+        master_ip: "{{ inventory_hostname }}"
+      when: "'kubernetes_master' in group_names"
+      tags:
+        - kube
+
+    - name: Create the token auth file on all hosts
+      copy: "src={{ hostvars['localhost']['ansible_base_dir'] }}/known_tokens.csv dest={{ token_auth_file }}"
+      notify:
+        - restart kubelet
+      tags:
+        - kube
+
+    - name: Generate kubeconfig file on all nodes
+      script: "./scripts/create_kubectlconfig.sh"
+      environment:
+        CA_CERT: "{{ hostvars[groups['kubernetes_master'][0]]['ca_certificate_data'] }}"
+        CLIENT_CERT: "{{ hostvars[groups['kubernetes_master'][0]]['client_certificate_data'] }}"
+        CLIENT_KEY: "{{ hostvars[groups['kubernetes_master'][0]]['client_key_data'] }}"
+        CLUSTER_NAME: "{{ cluster_name }}"
+        MASTER_IP: "{{ hostvars[groups['kubernetes_master'][0]]['master_ip'] }}"
+        MASTER_SECURE_PORT: "{{ api_server_secure_port }}"
+        TOKEN_AUTH_FILE: "{{ token_auth_file }}"
+        CONFIG_DIR: "{{ item }}"
+      with_items:
+        - "/var/lib/kubelet"
+        - "/var/lib/kube-proxy"
+        - "{{ k8s_certs_location }}"
+      notify:
+         - restart kubelet
+         - restart kube-proxy
+      tags:
+        - kube
+
+    - name: Fetch the kubeconfig file to localhost for kubectl client authentication
+      fetch: "src={{ k8s_certs_location }}/{{ item }} dest={{ hostvars['localhost']['ansible_base_dir'] }}/ flat=yes"
+      with_items:
+        - "kubeconfig"
+      when: "'kubernetes_master' in group_names"
+      tags:
+        - kube
+
+    - name: Create kubelet and kube-proxy daemon options files 
+      template: "src={{ hostvars['localhost']['ansible_base_dir'] }}/templates/default-{{ item }}.j2 dest=/etc/default/{{ item }}"
+      with_items:
+         - "kubelet"
+         - "kube-proxy"
+      tags:
+        - kube
+      notify:
+        - restart kubelet
+        - restart kube-proxy
+
+    - name: Create kubelet and kube-proxy upstart config files
+      copy: "src={{ hostvars['localhost']['ansible_base_dir'] }}/files/{{ item }}.conf dest=/etc/init/{{ item }}.conf"
+      with_items:
+         - "kubelet"
+         - "kube-proxy"
+      tags:
+        - kube
+      notify:
+        - restart kubelet
+        - restart kube-proxy
+
+    - name: Deploy core master service manifest
+      template: "src={{ hostvars['localhost']['ansible_base_dir'] }}/templates/master-manifest.j2 dest=/etc/kubernetes/manifests/master-manifest.yaml"
+      when: "'kubernetes_master' in group_names"
+      tags:
+        - kube
+      notify:
+        - restart kubelet
+
+    - name: "Build /etc/hosts file"
+      lineinfile:
+         dest: /etc/hosts 
+         regexp: '.*{{ hostvars[item].ansible_hostname }}$'
+         line: "{{ hostvars[item].ansible_default_ipv4.address }} {{ hostvars[item].ansible_hostname }}"
+         state: present
+      when: "hostvars[item].ansible_default_ipv4.address is defined"
+      with_items: groups['all']
+      tags:
+        - kube
+        - docker
+
+    - name: Start kubelet and kube-proxy services on the master node
+      service: "name={{ item }} state=started enabled=yes"
+      with_items:
+        - "kubelet"
+        - "kube-proxy"
+      tags:
+        - kube
+      notify:
+        - restart kubelet
+        - restart kube-proxy
+
+  handlers:
+    - name: restart kubelet
+      service: name=kubelet state=restarted
+
+    - name: restart kube-proxy
+      service: name=kube-proxy state=restarted
+
+    - name: restart docker
+      service: name=docker state=restarted
+
+
+- hosts: localhost
+  vars_files: 
+    - settings.yaml
+  tasks:
+    - name: Ensure kube directory is present in the home directory of the user
+      file: "path={{ lookup('env','HOME') }}/.kube state=directory"
+      tags:
+        - kube
+
+    - name: Copy kubeconfig file to HOME directory
+      copy: "src={{ ansible_base_dir }}/kubeconfig dest={{ lookup('env','HOME') }}/.kube/config"
+      tags:
+        - kube
+
+    - name: Create cluster validate script 
+      template: "src={{ ansible_base_dir }}/templates/kube-env.j2 dest={{ ansible_base_dir }}/scripts/kube-env.sh mode=0755"
+      tags:
+        - kube
+
+    - name: Add routes to neutron tenant gateway router for routed networking deployment
+      script: "{{ ansible_base_dir }}/scripts/add_neutron_routes.py"
+      when: networking == "routed"
+      environment:
+         SETTINGS_FILE:  "{{ ansible_base_dir }}/settings.yaml"
+      tags:
+        - kube
+
+    - name: Get kubectl for the Mac OS X localhost if OS is darwin
+      get_url:
+        url: "{{ k8s_binary_location }}/v{{ k8s_version }}/bin/darwin/amd64/{{ item }}"
+        dest: "{{ ansible_binary_dir }}/{{ item }}"
+        mode: 0755
+      with_items:
+        - kubectl
+      when: ansible_os_family == "Darwin"
+      tags:
+        - kube
+
+    - name: Get kubectl for the Linux localhost if OS is Linux
+      get_url:
+        url: "{{ k8s_binary_location }}/v{{ k8s_version }}/bin/linux/amd64/{{ item }}"
+        dest: "{{ ansible_binary_dir }}/{{ item }}"
+        mode: 0755
+      with_items:
+        - kubectl
+      when: ansible_os_family == "Debian"
+      tags:
+        - kube
+
+
+

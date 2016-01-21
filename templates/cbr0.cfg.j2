@@ -1,0 +1,5 @@
+# Add the Container bridge network interface
+auto cbr0
+iface cbr0 inet static
+     address {{ node_pod_cidr[item] }}
+pre-up brctl addbr cbr0

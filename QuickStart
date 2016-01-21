@@ -1,0 +1,35 @@
+1. Install ansible 2.0 or greater and its dependencies on the client machine (e.g. Mac OS X) using pip
+
+sudo easy_install pip 
+sudo pip install paramiko PyYAML Jinja2 httplib2 six
+sudo pip install ansible
+sudo pip install python-novaclient python-neutronclient
+sudo pip install netaddr
+
+3. Edit the settings.yaml file and put in your cloud specific settings
+    - If you update the machine roles, the playbooks need update
+
+4. Update the hosts file with the inventory and login information for OpenStack nova compute hosts
+
+5. Run setup.sh
+This program will invoke the ansible playbooks to 
+- Create instances
+- Install docker
+- Create the server and client certificates
+- Setup iptables rules on nova compute hosts
+- Setup the kubernetes cluster
+- Configure networking
+- Generate the client environment for docker and kubectl
+
+6. The kubectl client will be downloaded to the binaries sub-directory 
+   Copy it to /usr/local/bin or update the PATH environment variable to invoke the program.
+
+7. The docker host authentication files for each node will be created in the directory
+in which the script runs and will be named as <nodename>.env. To use the docker client against, 
+a docker host source the file.
+for e.g. 
+source master1-k8s.env
+docker ps
+
+8. The kubectl config file will be copied to the $HOME/.kube/config location to enable 
+secure connectivity between the client and kube-api server.

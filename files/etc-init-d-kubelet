@@ -1,0 +1,96 @@
+#!/bin/sh
+set -e
+
+##Init Script to Start the Kubelet service
+#The location of the Kubernetes binaries
+export PATH=/home/ubuntu/kubernetes/server/kubernetes/server/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin:/opt/bin:
+BASE=kubelet
+
+# modify these in /etc/default/$BASE (/etc/default/kubelet)
+KUBELET=/home/ubuntu/kubernetes/server/kubernetes/server/bin/$BASE
+# This is the pid file managed by kube-apiserver itself
+KUBELET_PIDFILE=/var/run/$BASE.pid
+KUBELET_LOGFILE=/var/log/$BASE.log
+KUBELET_DESC="kubelet"
+
+MASTER_IP="172.16.69.83"
+#Options to kubelet
+KUBELET_ADDRESS="--address=0.0.0.0"
+KUBELET_PORT="--port=10250"
+KUBELET_API_SERVER="--api_servers=http://${MASTER_IP}:8080"
+KUBELET_ARGS="--register-node=true --config=/etc/kubernetes/manifests --kubeconfig=/var/lib/kubelet/kubeconfig"
+
+KUBELET_OPTS="$KUBELET_ADDRESS $KUBELET_PORT $KUBELET_API_SERVER $KUBELET_ARGS"
+
+# Get lsb functions
+. /lib/lsb/init-functions
+
+if [ -f /etc/default/$BASE ]; then
+    . /etc/default/$BASE
+fi
+
+# see also init_is_upstart in /lib/lsb/init-functions (which isn't available in Ubuntu 12.04, or we'd use it)
+if [ -x /sbin/initctl ] && /sbin/initctl version 2>/dev/null | grep -q upstart; then
+    log_failure_msg "$KUBELET_DESC is managed via upstart, try using service $BASE $1"
+    exit 1
+fi
+
+# Check kube-apiserver is present
+if [ ! -x $KUBELET ]; then
+    log_failure_msg "$KUBELET not present or not executable"
+    exit 1
+fi
+
+fail_unless_root() {
+    if [ "$(id -u)" != '0' ]; then
+        log_failure_msg "$KUBELET_DESC must be run as root"
+        exit 1
+    fi
+}
+
+KUBELET_START="start-stop-daemon \
+--start \
+--background \
+--quiet \
+--exec $KUBELET \
+--make-pidfile --pidfile $KUBELET_PIDFILE \
+-- $KUBELET_OPTS \
+>> $KUBELET_LOGFILE 2>&1"
+
+KUBELET_STOP="start-stop-daemon \
+--stop \
+--pidfile $KUBELET_PIDFILE"
+
+case "$1" in
+    start)
+        fail_unless_root
+        log_begin_msg "Starting $KUBELET_DESC: $BASE"
+        $KUBELET_START
+        log_end_msg $?
+        ;;
+
+    stop)
+        fail_unless_root
+        log_begin_msg "Stopping $KUBELET_DESC: $BASE"
+        $KUBELET_STOP
+        log_end_msg $?
+        ;;
+
+    restart | force-reload)
+        fail_unless_root
+        log_begin_msg "Stopping $KUBELET_DESC: $BASE"
+        $KUBELET_STOP
+        $KUBELET_START
+        log_end_msg $?
+        ;;
+
+    status)
+        status_of_proc -p "$KUBELET_PIDFILE" "$KUBELET" "$KUBELET_DESC"
+        ;;
+
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+

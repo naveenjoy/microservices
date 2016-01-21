@@ -1,0 +1,44 @@
+# Docker Upstart and SysVinit configuration file
+#Copy this file to /etc/default/docker
+#Customize location of Docker binary (especially for development testing).
+#DOCKER="/usr/local/bin/docker"
+
+#If you need Docker to use an HTTP proxy, it can also be specified here.
+#export http_proxy="http://127.0.0.1:3128/"
+
+# Use DOCKER_OPTS to modify the daemon startup options.
+
+DOCKER_OPTS='
+-H tcp://0.0.0.0:2376
+-H unix:///var/run/docker.sock
+--storage-driver aufs
+--label provider=openstack
+--bridge=cbr0
+--iptables=false
+--ip-masq=false
+--dns=8.8.8.8
+--tlsverify
+--tlscacert={{ docker_certs_location }}/ca.pem
+--tlscert={{ docker_certs_location }}/server.cert
+--tlskey={{ docker_certs_location }}/server.key
+
+'
+
+# This is also a handy place to tweak where Docker's temporary files go.
+#export TMPDIR="/mnt/bigdrive/docker-tmp"
+
+# Set proxy environment
+{% if http_proxy %}
+export HTTP_PROXY={{ http_proxy }}
+export http_proxy={{ http_proxy }}
+{% endif %}
+
+{% if https_proxy %}
+export HTTPS_PROXY={{ https_proxy }}
+export https_proxy={{ https_proxy }}
+{% endif %}
+
+{% if no_proxy %}
+export NO_PROXY={{ no_proxy }}
+export no_proxy={{ no_proxy }}
+{% endif %}

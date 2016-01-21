@@ -1,0 +1,99 @@
+#Define all program variables here
+#Set to true for the instances to be created
+create_nodes: true
+#Define all the openstack cloud nodes here with their groups metadata
+#If you modify the ansible_host_* keys, update them in the playbooks 
+nodes:
+  - name: master1-k8s
+    meta:
+      ansible_host_groups: kubernetes_master #role name for master
+      ansible_host_vars: ansible_user->ubuntu
+
+  - name: worker1-k8s
+    meta:
+      ansible_host_groups: kubernetes_worker #role name for the minions
+      ansible_host_vars: ansible_user->ubuntu
+
+  - name: worker2-k8s
+    meta:
+      ansible_host_groups: kubernetes_worker
+      ansible_host_vars: ansible_user->ubuntu 
+
+#Openstack profile for launching instances
+#Change the below value to match your deployment
+os_cloud_profile:
+  os_compute_api_version: "2.0"
+  os_ssh_user: ubuntu
+  os_username: admin
+  os_password: admin
+  os_region: RegionOne
+  os_availability_zone: nova
+  os_security_groups: 
+    - "docker"
+  os_network_name: net1
+  os_floatingip_pools: 
+    - "ext-net"
+  os_tenant_name: admin
+  os_tenant_router_name: gw1
+  os_key_name: id_rsa_mac
+  os_flavor_name: m1.small
+  os_image_name: ubuntu-14.04-amd64.qcow2
+  os_auth_url: http://10.100.100.10:5000/v2.0
+
+#Define keys used for looking up ansible host roles
+#key: role_name 
+ansible_host_groups_key: ansible_host_groups
+ansible_host_vars_key: ansible_host_vars
+
+#For enabling TLS 
+#path, filename where the CA certificates are stored
+docker_certs_location: "/srv/kubernetes"
+k8s_certs_location: "/srv/kubernetes"
+cert_group: "kube-cert"
+
+#Kubernetes Version Control
+k8s_version: 1.1.2
+etcd_version: 2.2.1
+
+#Set corporate proxy settings here
+http_proxy:
+https_proxy:
+no_proxy: "localhost,127.0.0.0/8,::1,/var/run/docker.sock"
+
+cluster_name: ClusterOne
+#Cluster networking settings
+service_cluster_ip_range: "10.6.0.0/16" 
+cluster_cidr: "10.5.0.0/16"
+#Set to routed or flannel
+networking: routed
+#Define Kubernetes NODE POD CIDR Range and subnets to POD mappings
+node_pod_cidr_range: "10.5.0.0/16"
+node_pod_cidr:
+   #Nodename to CIDR mapping
+   master1-k8s: "10.5.0.1/24"
+   worker1-k8s: "10.5.1.1/24"
+   worker2-k8s: "10.5.2.1/24"
+api_server_port: 8080
+api_server_secure_port: 8443
+etcd_port: 4001
+token_auth_file: "/var/lib/kube-apiserver/known_tokens.csv"
+#Location of kubeconfig file
+kube_config_file: "/var/lib/kubelet/kubeconfig"
+#Configuration directories
+config_dirs:
+   - "/var/lib/kubelet"
+   - "/var/lib/kube-proxy"
+   - "/var/lib/kube-apiserver"
+   - "/etc/kubernetes"
+   - "/etc/kubernetes/manifests"
+   - "/srv/kubernetes"
+
+#Remote location used to pull the binaries for kubelet, kube-proxy and kubectl and container images
+k8s_binary_location: "https://storage.googleapis.com/kubernetes-release/release"
+k8s_apiserver_container_registry: "gcr.io/google_containers/hyperkube"
+k8s_scheduler_container_registry: "gcr.io/google_containers/hyperkube"
+k8s_controller_manager_container_registry: "gcr.io/google_containers/hyperkube"
+etcd_container_registry: "gcr.io/google_containers/etcd"
+
+#NTP server settings
+ntpserver: "time.nist.gov"

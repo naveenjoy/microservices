@@ -1,0 +1,148 @@
+kind: "Pod"
+apiVersion: "v1"
+metadata: 
+  name: "kube-master-services"
+spec: 
+  hostNetwork: true
+  containers:
+    - 
+      name: "kube-etcd"
+      image: "{{etcd_container_registry}}:{{ etcd_version }}"
+      command: 
+        - "/bin/sh"
+        - "-c"
+        - "/usr/local/bin/etcd --listen-peer-urls=http://127.0.0.1:2380 --addr 127.0.0.1:{{ etcd_port }} --bind-addr 0.0.0.0:{{ etcd_port }} --data-dir /var/etcd/data "
+      livenessProbe: 
+        httpGet: 
+          host: "127.0.0.1"
+          port: {{ etcd_port }}
+          path: "/health"
+        initialDelaySeconds: 15
+        timeoutSeconds: 15
+      ports: 
+        - 
+          name: "serverport"
+          containerPort: 2380
+          hostPort: 2380
+        - 
+          name: "clientport"
+          containerPort: {{ etcd_port }}
+          hostPort: {{ etcd_port }}
+      volumeMounts: 
+        - 
+          name: "varetcd"
+          mountPath: "/var/etcd/data"
+          readOnly: false
+        - 
+          name: "varlogetcd"
+          mountPath: "/var/log/etcd.log"
+          readOnly: false 
+
+    - 
+      name: "kube-apiserver"
+      image: "{{ k8s_apiserver_container_registry }}:v{{ k8s_version }}"
+      args:
+        - "/hyperkube"
+        - "apiserver"
+        - "--cluster-name={{ cluster_name }}"
+        - "--insecure-bind-address=0.0.0.0"
+      # - "--insecure-port={{ api_server_port }}"
+        - "--secure-port={{ api_server_secure_port }}"
+        - "--etcd-servers=http://127.0.0.1:{{ etcd_port }}"
+        - "--tls-cert-file={{ k8s_certs_location }}/server.cert"
+        - "--tls-private-key-file={{ k8s_certs_location }}/server.key"
+        - "--client-ca-file={{ k8s_certs_location }}/ca.pem"
+        - "--service-cluster-ip-range={{ service_cluster_ip_range }}" 
+        - "--token_auth_file={{ token_auth_file }}"
+        - "--allow-privileged=true"
+      ports: 
+        - 
+          name: "https"
+          hostPort: {{ api_server_secure_port }}
+          containerPort: {{ api_server_secure_port }}
+        - 
+          name: "local"
+          hostPort: {{ api_server_port }}
+          containerPort: {{ api_server_port }}
+      volumeMounts: 
+        - 
+          name: "srvkube"
+          mountPath: "{{ k8s_certs_location }}"
+          readOnly: true
+        - 
+          name: "etcssl"
+          mountPath: "/etc/ssl"
+          readOnly: true
+        - 
+          name: "tokenfile"
+          mountPath: "{{ token_auth_file }}"
+      livenessProbe: 
+        httpGet: 
+          path: "/healthz"
+          port: {{ api_server_port }}
+        initialDelaySeconds: 15
+        timeoutSeconds: 15
+
+    - 
+      name: "kube-scheduler"
+      image: "{{ k8s_scheduler_container_registry }}:v{{ k8s_version }}"
+      {% for host in groups['kubernetes_master'] -%}
+      args:
+        - "/hyperkube"
+        - "scheduler"
+        - "--address=127.0.0.1"
+        - "--master=http://{{ hostvars[host]['ansible_cbr0']['ipv4']['address'] }}:{{ api_server_port }}"
+        - "--kubeconfig={{ kube_config_file }}"
+      {% endfor -%}
+      volumeMounts: 
+        - 
+          name: "kubeconfig"
+          mountPath: "{{kube_config_file}}"
+          readOnly: true
+
+    -
+      name: "kube-controller-manager"
+      image: "{{k8s_controller_manager_container_registry}}:v{{ k8s_version }}"
+      {% for host in groups['kubernetes_master'] -%}
+      args:
+        - "/hyperkube"
+        - "controller-manager" 
+        - "--cluster-name={{ cluster_name }}"
+        - "--cluster-cidr={{ cluster_cidr }}"
+        - "--address=127.0.0.1"
+        - "--master=http://{{ hostvars[host]['ansible_cbr0']['ipv4']['address'] }}:{{ api_server_port }}"
+        - "--kubeconfig={{ kube_config_file }}"
+      {% endfor -%}
+      volumeMounts: 
+        - 
+          name: "kubeconfig"
+          mountPath: "{{ kube_config_file }}"
+          readOnly: true
+
+  volumes: 
+    - 
+      name: "kubeconfig"
+      hostPath: 
+        path: "{{ kube_config_file }}"
+    - 
+      name: "varetcd"
+      hostPath: 
+        path: "/var/etcd/data"
+    - 
+      name: "varlogetcd"
+      hostPath: 
+        path: "/var/log/etcd.log"
+    - 
+      name: "srvkube"
+      hostPath: 
+        path: "{{ k8s_certs_location }}"
+    - 
+      name: "etcssl"
+      hostPath: 
+        path: "/etc/ssl"
+    -
+      name: "tokenfile"
+      hostPath:
+        path: "{{ token_auth_file }}"
+
+
