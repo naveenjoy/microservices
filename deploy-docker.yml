@@ -53,16 +53,19 @@
     - name: Update apt sources to use the packages in the docker repo
       apt_repository: "repo='deb https://apt.dockerproject.org/repo {{ ansible_distribution | lower }}-{{ ansible_distribution_release }} main' state=present"
       register: add_apt_source_docker
+      environment:
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
+        no_proxy: "{{ no_proxy|default('') }}"
       tags:
         - docker
 
     - name: update apt cache
       apt: update_cache=yes
-      when: add_apt_source_docker.changed
       environment:
-        HTTP_PROXY: "{{ http_proxy|default('') }}"
-        HTTPS_PROXY: "{{ https_proxy|default('') }}"
-        NO_PROXY: "{{ no_proxy|default('') }}"
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
+        no_proxy: "{{ no_proxy|default('') }}"
       tags:
         - docker
 
@@ -72,18 +75,18 @@
         - "linux-image-extra-{{ ansible_kernel }}"
         - "bridge-utils"
       environment:
-        HTTP_PROXY: "{{ http_proxy|default('') }}"
-        HTTPS_PROXY: "{{ https_proxy|default('') }}"
-        NO_PROXY: "{{ no_proxy|default('') }}"
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
+        no_proxy: "{{ no_proxy|default('') }}"
       tags:
         - docker
 
     - name: install latest docker
       apt: "name=docker-engine state=latest"
       environment:
-        HTTP_PROXY: "{{ http_proxy|default('') }}"
-        HTTPS_PROXY: "{{ https_proxy|default('') }}"
-        NO_PROXY: "{{ no_proxy|default('') }}"
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
+        no_proxy: "{{ no_proxy|default('') }}"
       tags:
         - docker
 
@@ -153,9 +156,9 @@
     - name: Ensure ntp is present
       apt: name=ntp state=present
       environment:
-        HTTP_PROXY: "{{ http_proxy|default('') }}"
-        HTTPS_PROXY: "{{ https_proxy|default('') }}"
-        NO_PROXY: "{{ no_proxy|default('') }}"
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
+        no_proxy: "{{ no_proxy|default('') }}"
       tags:
         - docker
         - ntp

@@ -38,8 +38,8 @@
         dest: "/usr/bin/kubelet"
         mode: 0511
       environment:
-        HTTP_PROXY: "{{ http_proxy|default('') }}"
-        HTTPS_PROXY: "{{ https_proxy|default('') }}"
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
       notify:
         - restart kubelet
       tags:
@@ -51,8 +51,8 @@
         dest: "/usr/bin/kube-proxy"
         mode: 0511
       environment:
-        HTTP_PROXY: "{{ http_proxy|default('') }}"
-        HTTPS_PROXY: "{{ https_proxy|default('') }}"
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
       notify:
         - restart kube-proxy
       tags:
@@ -76,9 +76,9 @@
         EXTRA_SANS: "IP:{{ ansible_default_ipv4.address }},IP:{{ ansible_cbr0.ipv4.address }}"
         CERT_GROUP: "{{ cert_group }}"
         CERT_DIR: "{{ k8s_certs_location }}"
-        HTTP_PROXY: "{{ http_proxy|default('') }}"
-        HTTPS_PROXY: "{{ https_proxy|default('') }}"
-        NO_PROXY: "{{ no_proxy|default('') }}"
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
+        no_proxy: "{{ no_proxy|default('') }}"
       args:
         creates: server.cert
       tags:

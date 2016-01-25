@@ -58,7 +58,7 @@ etcd_version: 2.2.1
 #Set corporate proxy settings here
 http_proxy:
 https_proxy:
-no_proxy: "localhost,127.0.0.0/8,::1,/var/run/docker.sock"
+no_proxy: "localhost,169.254.169.254,127.0.0.0/8,::1,/var/run/docker.sock"
 
 cluster_name: ClusterOne
 #Cluster networking settings
