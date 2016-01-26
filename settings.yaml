@@ -62,12 +62,11 @@ no_proxy: "localhost,169.254.169.254,127.0.0.0/8,::1,/var/run/docker.sock"
 
 cluster_name: ClusterOne
 #Cluster networking settings
-service_cluster_ip_range: "10.6.0.0/16" 
-cluster_cidr: "10.5.0.0/16"
+service_cluster_ip_range: "10.6.0.0/16"  #CIDR range for services
+cluster_cidr: "10.5.0.0/16" #CIDR range for containers
 #Set to routed or flannel
 networking: routed
 #Define Kubernetes NODE POD CIDR Range and subnets to POD mappings
-node_pod_cidr_range: "10.5.0.0/16"
 node_pod_cidr:
    #Nodename to CIDR mapping
    master1-k8s: "10.5.0.1/24"

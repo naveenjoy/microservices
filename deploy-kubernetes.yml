@@ -80,7 +80,7 @@
         https_proxy: "{{ https_proxy|default('') }}"
         no_proxy: "{{ no_proxy|default('') }}"
       args:
-        creates: server.cert
+        creates: "{{ k8s_certs_location }}/server.cert"
       tags:
         - kube
       notify:
