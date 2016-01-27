@@ -29,6 +29,8 @@
     - kubernetes_worker
   become_user: root
   become: yes
+  vars:
+    iptablesNatRuleupdate: false
   vars_files: 
     - settings.yaml
   tasks:
@@ -88,16 +90,6 @@
         - restart kube-proxy
         - restart docker
 
-    - name: Fetch remote CA and client Certificates for docker client authentication
-      fetch: "src={{ k8s_certs_location }}/{{ item }} dest={{ hostvars['localhost']['ansible_cert_dir'] }}/{{ ansible_hostname }}/ flat=yes"
-      with_items:
-        - "ca.pem" #CA Certificate
-        - "key.pem" #TLS Client key (Docker and Kube Clients)
-        - "cert.pem" #TLS Client cert
-      tags:
-        - docker
-        - kube
-
     - name: Register base64 encoded Master CA Certificate
       slurp: 
         src: "{{ k8s_certs_location }}/ca.pem"
@@ -114,13 +106,22 @@
       tags:
         - kube
 
-
     - name: Register base64 encoded Master Client Key
       slurp: 
         src: "{{ k8s_certs_location }}/key.pem"
       register: client_key
       when: "'kubernetes_master' in group_names"
       tags:
+        - kube
+
+    - name: Fetch remote CA and client certificates for docker client authentication
+      fetch: "src={{ k8s_certs_location }}/{{ item }} dest={{ hostvars['localhost']['ansible_cert_dir'] }}/{{ ansible_hostname }}/ flat=yes"
+      with_items:
+        - "ca.pem" #CA Certificate
+        - "key.pem" #TLS Client key (Docker and Kube Clients)
+        - "cert.pem" #TLS Client cert
+      tags:
+        - docker
         - kube
 
     - name: Set the Certificate data and the master node IP Addr as facts
@@ -221,6 +222,36 @@
       notify:
         - restart kubelet
         - restart kube-proxy
+
+    - name: check iptables nat rules
+      shell: iptables -t nat -S POSTROUTING | egrep '^-A' | head -2
+      register: iptablesnatrules
+      tags:
+        - iptables
+        - kube
+
+    - name: Check if iptables nat rule needs update
+      set_fact:
+          iptablesNatRuleupdate: true
+      when: "'kubernetes_nat_cluster_cidr' not in iptablesnatrules.stdout"
+      tags:
+        - iptables
+        - kube
+
+    - name: NAT traffic sourced from container networks for outbound internet access
+      command: /sbin/iptables -t nat -A POSTROUTING ! -d {{ cluster_cidr }}
+                 -o eth0 -j MASQUERADE -m comment --comment "kubernetes_nat_cluster_cidr"
+      when: iptablesNatRuleupdate
+      tags:
+        - iptables
+        - kube
+
+    - name: Save iptables
+      command: iptables-save
+      when: iptablesNatRuleupdate
+      tags:
+        - iptables
+        - kube
 
   handlers:
     - name: restart kubelet
