@@ -17,5 +17,5 @@
 # Kube-env file to set the environment for validate-cluster.sh script
 
 
-NUM_MINIONS="3"
+NUM_MINIONS="2"
 REGISTER_MASTER_KUBELET="true"

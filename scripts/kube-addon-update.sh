@@ -45,6 +45,8 @@
 KUBECTL=${TEST_KUBECTL:-}   # substitute for tests
 KUBECTL=${KUBECTL:-${KUBECTL_BIN:-}}
 KUBECTL=${KUBECTL:-/usr/local/bin/kubectl}
+PYTHON=${PYTHON:-python}
+
 if [[ ! -x ${KUBECTL} ]]; then
     echo "ERROR: kubectl command (${KUBECTL}) not found or is not executable" 1>&2
     exit 1

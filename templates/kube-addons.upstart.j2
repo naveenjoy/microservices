@@ -8,5 +8,6 @@ env KUBECTL_BIN=/usr/local/bin/kubectl
 env KUBERNETES_MASTER_NAME={{ hostvars[groups['k8s_master'][0]]['ansible_hostname']}}
 env CA_CERT={{ hostvars[groups['k8s_master'][0]]['ca_certificate_data'] }}
 env PYTHON=/usr/bin/python
+env TEST_ADDON_CHECK_INTERVAL_SEC=120
 
 exec /srv/kubernetes/kube-addons.sh

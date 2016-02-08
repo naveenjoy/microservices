@@ -17,5 +17,5 @@
 # Kube-env file to set the environment for validate-cluster.sh script
 
 
-NUM_MINIONS="{{ groups['kubernetes_worker'] | count }}"
+NUM_MINIONS="{{ groups['k8s_worker'] | count }}"
 REGISTER_MASTER_KUBELET="true"

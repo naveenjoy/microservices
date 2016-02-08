@@ -1,6 +1,6 @@
-#Specify all your hypervisors here
+#List all your hypervisors here
 [computenodes]
-192.168.119.42
+10.100.100.10
 
 [computenodes:vars]
 ansible_connection=ssh
