@@ -46,7 +46,7 @@ spec:
         - "apiserver"
         - "--cluster-name={{ cluster_name }}"
         - "--insecure-bind-address=0.0.0.0"
-      # - "--insecure-port={{ api_server_port }}"
+        - "--insecure-port={{ api_server_port }}"
         - "--secure-port={{ api_server_secure_port }}"
         - "--etcd-servers=http://127.0.0.1:{{ etcd_port }}"
         - "--tls-cert-file={{ k8s_certs_location }}/server.cert"
@@ -86,7 +86,7 @@ spec:
     - 
       name: "kube-scheduler"
       image: "{{ k8s_scheduler_container_registry }}:v{{ k8s_version }}"
-      {% for host in groups['kubernetes_master'] -%}
+      {% for host in groups['k8s_master'] -%}
       args:
         - "/hyperkube"
         - "scheduler"
@@ -103,7 +103,7 @@ spec:
     -
       name: "kube-controller-manager"
       image: "{{k8s_controller_manager_container_registry}}:v{{ k8s_version }}"
-      {% for host in groups['kubernetes_master'] -%}
+      {% for host in groups['k8s_master'] -%}
       args:
         - "/hyperkube"
         - "controller-manager" 

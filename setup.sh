@@ -44,11 +44,11 @@ echo "Launching Instances"
 if ansible-playbook -i hosts launch-instances.yml $@; then
 #Wait for the instances to boot up
     echo "Waiting for instances to boot"
-    sleep 30
+    sleep 6
     echo "Deploying Docker"
     if ansible-playbook -i ${TOP_DIR}/scripts/inventory.py deploy-docker.yml $@; then
         echo "Deploying Kubernetes"
-        ansible-playbook -i ${TOP_DIR}/scripts/inventory.py deploy-kubernetes.yml $@ || { exit 1; }
+        ansible-playbook -i ${TOP_DIR}/scripts/inventory.py deploy-kubernetes.yml $@ 
         if  { [[ -n "$@" ]]  && echo "$@" | grep -q "kube"; } || [[ ! -n "$@" ]]; then
             echo "Validating Cluster"
             ${TOP_DIR}/scripts/validate-cluster.sh

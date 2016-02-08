@@ -3,7 +3,7 @@
 
 KUBE_PROXY_OPTS='
 --bind-address=0.0.0.0
-{% for host in groups['kubernetes_master'] %}
+{% for host in groups['k8s_master'] %}
 --master=https://{{ hostvars[host]['ansible_cbr0']['ipv4']['address'] }}:{{ api_server_secure_port }}
 {% endfor %}
 --kubeconfig=/var/lib/kube-proxy/kubeconfig

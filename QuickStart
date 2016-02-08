@@ -6,22 +6,36 @@ sudo pip install ansible
 sudo pip install python-novaclient python-neutronclient
 sudo pip install netaddr
 
-3. Edit the settings.yaml file and put in your cloud specific settings
-    - If you update the machine roles, the playbooks need update
+2. Clone this repo to your local machine
+
+3. Edit the settings.yaml file and add your cloud specific settings
+    - Note: If you update the machine roles, all references to previous roles in playbooks and templates need to be updated with the new role name
+    - Set the kubernetes version in the "k8s_version" key 
+    - Set your openstack ssh key in the os_cloud_profile
+    - Configure the instance security group to permit the below traffic from client IPS
+         - Kubernetes master API ports
+         - tcp port 22 ssh traffic
+         - traffic to and from the cluster_cidr range
+         - tcp port 2376 for docker
+         - tcp port 10250 for kubectl logs
 
 4. Update the hosts file with the inventory and login information for OpenStack nova compute hosts
+     - To enable ansible to ssh into the openstack hypervisor, copy your ssh public key and append
+       it to the $HOME/.ssh/authorized_keys file of the "ansible_user" specified in the host file.
 
 5. Run setup.sh
 This program will invoke the ansible playbooks to 
-- Create instances
-- Install docker
-- Create the server and client certificates
-- Setup iptables rules on nova compute hosts
-- Setup the kubernetes cluster
+- Create instances for running the cluster
+- Install the docker binary
+- Create server and client certificates for docker and kubernetes
+- Download the client certs and kubeconfig to the local machine
+- Setup iptables rules on nova compute hosts to permit traffic to the POD networks
+- Setup the kubernetes cluster master and worker components
 - Configure networking
 - Generate the client environment for docker and kubectl
+- Validate the cluster
 
-6. The kubectl client will be downloaded to the binaries sub-directory 
+6. The kubectl client will be downloaded to the binaries sub-directory on the client
    Copy it to /usr/local/bin or update the PATH environment variable to invoke the program.
 
 7. The docker host authentication files for each node will be created in the directory

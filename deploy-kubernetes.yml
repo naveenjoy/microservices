@@ -20,13 +20,14 @@
         ansible_cert_dir: "{{ ansible_base_dir }}/certs"
         ansible_script_dir: "{{ ansible_base_dir }}/scripts"
         ansible_binary_dir: "{{ ansible_base_dir }}/binaries"
+        ansible_file_dir: "{{ ansible_base_dir }}/files"
       tags:
         - kube
         - docker
 
 - hosts: 
-    - kubernetes_master
-    - kubernetes_worker
+    - k8s_master
+    - k8s_worker
   become_user: root
   become: yes
   vars:
@@ -94,7 +95,7 @@
       slurp: 
         src: "{{ k8s_certs_location }}/ca.pem"
       register: ca_certificate
-      when: "'kubernetes_master' in group_names"
+      when: "'k8s_master' in group_names"
       tags:
         - kube
 
@@ -102,7 +103,7 @@
       slurp: 
         src: "{{ k8s_certs_location }}/cert.pem"
       register: client_certificate
-      when: "'kubernetes_master' in group_names"
+      when: "'k8s_master' in group_names"
       tags:
         - kube
 
@@ -110,7 +111,7 @@
       slurp: 
         src: "{{ k8s_certs_location }}/key.pem"
       register: client_key
-      when: "'kubernetes_master' in group_names"
+      when: "'k8s_master' in group_names"
       tags:
         - kube
 
@@ -130,7 +131,7 @@
         client_certificate_data: "{{ client_certificate.content }}"
         client_key_data: "{{ client_key.content }}"
         master_ip: "{{ inventory_hostname }}"
-      when: "'kubernetes_master' in group_names"
+      when: "'k8s_master' in group_names"
       tags:
         - kube
 
@@ -144,11 +145,11 @@
     - name: Generate kubeconfig file on all nodes
       script: "./scripts/create_kubectlconfig.sh"
       environment:
-        CA_CERT: "{{ hostvars[groups['kubernetes_master'][0]]['ca_certificate_data'] }}"
-        CLIENT_CERT: "{{ hostvars[groups['kubernetes_master'][0]]['client_certificate_data'] }}"
-        CLIENT_KEY: "{{ hostvars[groups['kubernetes_master'][0]]['client_key_data'] }}"
+        CA_CERT: "{{ hostvars[groups['k8s_master'][0]]['ca_certificate_data'] }}"
+        CLIENT_CERT: "{{ hostvars[groups['k8s_master'][0]]['client_certificate_data'] }}"
+        CLIENT_KEY: "{{ hostvars[groups['k8s_master'][0]]['client_key_data'] }}"
         CLUSTER_NAME: "{{ cluster_name }}"
-        MASTER_IP: "{{ hostvars[groups['kubernetes_master'][0]]['master_ip'] }}"
+        MASTER_IP: "{{ hostvars[groups['k8s_master'][0]]['master_ip'] }}"
         MASTER_SECURE_PORT: "{{ api_server_secure_port }}"
         TOKEN_AUTH_FILE: "{{ token_auth_file }}"
         CONFIG_DIR: "{{ item }}"
@@ -166,7 +167,7 @@
       fetch: "src={{ k8s_certs_location }}/{{ item }} dest={{ hostvars['localhost']['ansible_base_dir'] }}/ flat=yes"
       with_items:
         - "kubeconfig"
-      when: "'kubernetes_master' in group_names"
+      when: "'k8s_master' in group_names"
       tags:
         - kube
 
@@ -194,11 +195,69 @@
 
     - name: Deploy core master service manifest
       template: "src={{ hostvars['localhost']['ansible_base_dir'] }}/templates/master-manifest.j2 dest=/etc/kubernetes/manifests/master-manifest.yaml"
-      when: "'kubernetes_master' in group_names"
+      when: "'k8s_master' in group_names"
       tags:
         - kube
       notify:
         - restart kubelet
+
+    - name: Get kubectl on master node
+      get_url:
+        url: "{{ k8s_binary_location }}/v{{ k8s_version }}/bin/linux/amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: 0755
+      with_items:
+        - kubectl
+      when: ansible_os_family == "Debian" and 'k8s_master' in group_names
+      environment:
+        http_proxy: "{{ http_proxy|default('') }}"
+        https_proxy: "{{ https_proxy|default('') }}"
+      tags:
+        - kube
+
+    - name: HACK | copy local kube addon scripts
+      copy: "src={{ hostvars['localhost']['ansible_script_dir'] }}/{{ item }}  dest=/srv/kubernetes/{{ item }}  mode=0755"
+      with_items:
+        - "kube-addons.sh"
+        - "kube-addon-update.sh"
+      when: "'k8s_master' in group_names"
+      tags:
+        - kube
+
+    - name: Copy system namespace yaml file
+      copy: "src={{ hostvars['localhost']['ansible_file_dir'] }}/namespace.yaml  dest=/etc/kubernetes/addons/namespace.yaml"
+      when: "'k8s_master' in group_names"
+      tags:
+        - kube
+
+    - name: Copy known_tokens file
+      copy: "src={{ hostvars['localhost']['ansible_base_dir'] }}/known_tokens.csv  dest=/srv/kubernetes/known_tokens.csv"
+      when: "'k8s_master' in group_names"
+      tags:
+        - kube
+
+    - name: Deploy kube-dns addon service manifests
+      template: "src={{ hostvars['localhost']['ansible_base_dir'] }}/templates/{{ item }}.j2 dest=/etc/kubernetes/addons/{{ item }}.yaml"
+      when: "'k8s_master' in group_names"
+      tags:
+        - kube
+      with_items:
+        - skydns-rc
+        - skydns-svc
+      notify:
+        - restart kubelet
+
+    - name: Install kube-addons upstart configuration
+      template: "src={{ hostvars['localhost']['ansible_base_dir'] }}/templates/kube-addons.upstart.j2 dest=/etc/init/kube-addons.conf"
+      when: "'k8s_master' in group_names"
+      tags:
+        - kube
+
+    - name: Enable and start kube addons
+      service: name=kube-addons enabled=yes state=started
+      when: "'k8s_master' in group_names"
+      tags:
+        - kube
 
     - name: "Build /etc/hosts file"
       lineinfile:

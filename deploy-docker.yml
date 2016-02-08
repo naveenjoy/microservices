@@ -18,8 +18,8 @@
         - docker
 
 - hosts: 
-    - kubernetes_master
-    - kubernetes_worker
+    - k8s_master
+    - k8s_worker
   become_user: root
   become: yes
   vars_files:
@@ -50,7 +50,7 @@
       tags:
         - docker
 
-    - name: Update apt sources to use the packages in the docker repo
+    - name: Update apt sources to use packages in the docker repo
       apt_repository: "repo='deb https://apt.dockerproject.org/repo {{ ansible_distribution | lower }}-{{ ansible_distribution_release }} main' state=present"
       register: add_apt_source_docker
       environment:
@@ -66,6 +66,7 @@
         http_proxy: "{{ http_proxy|default('') }}"
         https_proxy: "{{ https_proxy|default('') }}"
         no_proxy: "{{ no_proxy|default('') }}"
+      when: add_apt_source_docker.changed
       tags:
         - docker
 
