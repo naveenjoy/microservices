@@ -1,6 +1,7 @@
 binaries/*
 *.env
-*.pyc
+scripts/*.pyc
 kubeconfig
 pods/*
 certs/*
+settings.yaml
